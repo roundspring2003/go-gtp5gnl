@@ -8,17 +8,20 @@ import (
 )
 
 const (
-	PDR_ID = iota + 3
-	PDR_PRECEDENCE
-	PDR_PDI
-	PDR_OUTER_HEADER_REMOVAL
-	PDR_FAR_ID
-	PDR_ROLE_ADDR_IPV4
-	PDR_UNIX_SOCKET_PATH
-	PDR_QER_ID
-	PDR_SEID
-	PDR_URR_ID
-	PDR_PDN_TYPE
+	// Keep the values explicit: these constants are part of the Generic
+	// Netlink ABI and must not be renumbered when a new attribute is added.
+	PDR_ID                   = 3
+	PDR_PRECEDENCE           = 4
+	PDR_PDI                  = 5
+	PDR_OUTER_HEADER_REMOVAL = 6
+	PDR_FAR_ID               = 7
+	PDR_ROLE_ADDR_IPV4       = 8
+	PDR_UNIX_SOCKET_PATH     = 9
+	PDR_QER_ID               = 10
+	PDR_SEID                 = 11
+	PDR_URR_ID               = 12
+	PDR_PDN_TYPE             = 13
+	PDR_FLOW_QOS             = 14
 )
 
 type PDR struct {
@@ -31,6 +34,7 @@ type PDR struct {
 	URRID           []uint32
 	SEID            *uint64
 	PDNType         *uint8
+	FlowQoS         *FlowQoS
 }
 
 func DecodePDR(b []byte) (*PDR, error) {
@@ -71,6 +75,12 @@ func DecodePDR(b []byte) (*PDR, error) {
 		case PDR_PDN_TYPE:
 			v := b[n]
 			pdr.PDNType = &v
+		case PDR_FLOW_QOS:
+			flowQoS, err := DecodeFlowQoS(b[n:attrLen])
+			if err != nil {
+				return nil, err
+			}
+			pdr.FlowQoS = &flowQoS
 		default:
 			log.Printf("unknown type: %v\n", hdr.Type)
 		}
