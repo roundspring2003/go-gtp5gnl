@@ -11,24 +11,24 @@ const (
 	FLOW_QOS_UNSPEC = iota
 	FLOW_QOS_VERSION
 	FLOW_QOS_POLICY_ID
-	FLOW_QOS_TC_CLASSID
+	_ // Attribute 3 is reserved for the removed TC class ID.
 	FLOW_QOS_FLAGS
 	FLOW_QOS_GENERATION
 )
 
 const (
-	SHARED_MARK_ABI_VERSION uint8  = 1
-	FLOW_QOS_VALID          uint8  = 0x01
-	FLOW_QOS_POLICY_ID_MAX  uint32 = 0x00ffffff
+	SHARED_MARK_ABI_VERSION  uint8  = 1
+	FLOW_QOS_BINDING_VERSION uint8  = 2
+	FLOW_QOS_VALID           uint8  = 0x01
+	FLOW_QOS_POLICY_ID_MAX   uint32 = 0x00ffffff
 )
 
 // FlowQoS is the PDR-local binding used by the gtp5g shared skb mark ABI.
-// PolicyID is encoded in the low 24 bits of skb->mark and TCClassID is copied
-// to skb->priority by gtp5g.
+// PolicyID is encoded in the low 24 bits of skb->mark. Egress BPF selects
+// the TC class from the policy map.
 type FlowQoS struct {
 	Version    uint8
 	PolicyID   uint32
-	TCClassID  uint32
 	Flags      uint8
 	Generation uint32
 }
@@ -38,11 +38,11 @@ type FlowQoS struct {
 // existing binding and only publishes the version, flags and optional
 // generation fields required by that operation.
 func NewFlowQoSAttr(flowQoS FlowQoS) (nl.Attr, error) {
-	if flowQoS.Version != SHARED_MARK_ABI_VERSION {
+	if flowQoS.Version != FLOW_QOS_BINDING_VERSION {
 		return nl.Attr{}, fmt.Errorf(
-			"unsupported shared mark ABI version: got %d, want %d",
+			"unsupported FlowQoS binding version: got %d, want %d",
 			flowQoS.Version,
-			SHARED_MARK_ABI_VERSION,
+			FLOW_QOS_BINDING_VERSION,
 		)
 	}
 	if flowQoS.Flags & ^FLOW_QOS_VALID != 0 {
@@ -60,10 +60,7 @@ func NewFlowQoSAttr(flowQoS FlowQoS) (nl.Attr, error) {
 		{Type: FLOW_QOS_VERSION, Value: nl.AttrU8(flowQoS.Version)},
 	}
 	if flowQoS.Flags&FLOW_QOS_VALID != 0 {
-		attrs = append(attrs,
-			nl.Attr{Type: FLOW_QOS_POLICY_ID, Value: nl.AttrU32(flowQoS.PolicyID)},
-			nl.Attr{Type: FLOW_QOS_TC_CLASSID, Value: nl.AttrU32(flowQoS.TCClassID)},
-		)
+		attrs = append(attrs, nl.Attr{Type: FLOW_QOS_POLICY_ID, Value: nl.AttrU32(flowQoS.PolicyID)})
 	}
 	attrs = append(attrs, nl.Attr{Type: FLOW_QOS_FLAGS, Value: nl.AttrU8(flowQoS.Flags)})
 	if flowQoS.Generation != 0 {
@@ -102,11 +99,6 @@ func DecodeFlowQoS(b []byte) (FlowQoS, error) {
 				return flowQoS, io.ErrUnexpectedEOF
 			}
 			flowQoS.PolicyID = native.Uint32(payload)
-		case FLOW_QOS_TC_CLASSID:
-			if len(payload) < 4 {
-				return flowQoS, io.ErrUnexpectedEOF
-			}
-			flowQoS.TCClassID = native.Uint32(payload)
 		case FLOW_QOS_FLAGS:
 			if len(payload) < 1 {
 				return flowQoS, io.ErrUnexpectedEOF

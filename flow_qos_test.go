@@ -39,9 +39,8 @@ func TestPDRABIAttributeNumbers(t *testing.T) {
 
 func TestFlowQoSAttrRoundTrip(t *testing.T) {
 	want := FlowQoS{
-		Version:    SHARED_MARK_ABI_VERSION,
+		Version:    FLOW_QOS_BINDING_VERSION,
 		PolicyID:   1001,
-		TCClassID:  0x00010020,
 		Flags:      FLOW_QOS_VALID,
 		Generation: 7,
 	}
@@ -49,6 +48,15 @@ func TestFlowQoSAttrRoundTrip(t *testing.T) {
 	attr, err := NewFlowQoSAttr(want)
 	if err != nil {
 		t.Fatalf("NewFlowQoSAttr: %v", err)
+	}
+	nested, ok := attr.Value.(nl.AttrList)
+	if !ok || len(nested) != 4 {
+		t.Fatalf("valid FlowQoS binding has unexpected attributes: %+v", attr.Value)
+	}
+	for _, field := range nested {
+		if field.Type == 3 {
+			t.Fatal("removed TC class attribute was encoded")
+		}
 	}
 	b := encodeAttr(t, attr)
 
@@ -74,9 +82,8 @@ func TestFlowQoSAttrRoundTrip(t *testing.T) {
 
 func TestDecodePDRFlowQoS(t *testing.T) {
 	want := FlowQoS{
-		Version:    SHARED_MARK_ABI_VERSION,
+		Version:    FLOW_QOS_BINDING_VERSION,
 		PolicyID:   0x00ffffff,
-		TCClassID:  0x00010030,
 		Flags:      FLOW_QOS_VALID,
 		Generation: 11,
 	}
@@ -103,7 +110,7 @@ func TestDecodePDRFlowQoS(t *testing.T) {
 
 func TestFlowQoSClearAttr(t *testing.T) {
 	clear := FlowQoS{
-		Version:    SHARED_MARK_ABI_VERSION,
+		Version:    FLOW_QOS_BINDING_VERSION,
 		Generation: 8,
 	}
 	attr, err := NewFlowQoSAttr(clear)
@@ -125,17 +132,25 @@ func TestFlowQoSClearAttr(t *testing.T) {
 	}
 }
 
+func TestFlowQoSAttributeNumbers(t *testing.T) {
+	if FLOW_QOS_VERSION != 1 || FLOW_QOS_POLICY_ID != 2 ||
+		FLOW_QOS_FLAGS != 4 || FLOW_QOS_GENERATION != 5 {
+		t.Fatal("FlowQoS netlink attribute numbers changed")
+	}
+}
+
 func TestNewFlowQoSAttrValidation(t *testing.T) {
 	tests := []struct {
 		name    string
 		flowQoS FlowQoS
 	}{
 		{name: "zero version", flowQoS: FlowQoS{}},
-		{name: "unknown flags", flowQoS: FlowQoS{Version: 1, Flags: 0x02}},
+		{name: "old binding version", flowQoS: FlowQoS{Version: 1}},
+		{name: "unknown flags", flowQoS: FlowQoS{Version: FLOW_QOS_BINDING_VERSION, Flags: 0x02}},
 		{
 			name: "policy ID overflow",
 			flowQoS: FlowQoS{
-				Version:  1,
+				Version:  FLOW_QOS_BINDING_VERSION,
 				Flags:    FLOW_QOS_VALID,
 				PolicyID: FLOW_QOS_POLICY_ID_MAX + 1,
 			},
